@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"../db"
 	"gopkg.in/mgo.v2/bson"
+	"github.com/rs/cors"
 )
 
 type ServerProperties struct {
@@ -160,6 +161,25 @@ func FindById(w http.ResponseWriter, req *http.Request) {
 	resp, _ := json.Marshal(room)
 	ResponseWithJSON(w, resp, http.StatusOK)
 }
+
+func FindByUserId(w http.ResponseWriter, req *http.Request) {
+	validou,_ := validAuthHeader(req)
+	if !validou{
+		unauthorized(w)
+		return
+	}
+	var rooms models.Rooms
+	id := req.URL.Query().Get(":id")
+	rooms, err := rooms.FindByUserId(db.GetCollection(), bson.ObjectIdHex(id))
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	resp, _ := json.Marshal(rooms)
+	ResponseWithJSON(w, resp, http.StatusOK)
+}
+
 func badRequest(w http.ResponseWriter, err error) {
 	log.Println(err)
 	w.Header().Set("Content-Type", "application/json")
@@ -169,8 +189,9 @@ func badRequest(w http.ResponseWriter, err error) {
 func Start(properties ServerProperties) {
 	startDb()
 	m := pat.New()
+	handler := cors.AllowAll().Handler(m)
 	mapEndpoints(*m, properties)
-	http.Handle("/", m)
+	http.Handle("/", handler)
 	fmt.Println("servidor iniciado no endereço localhost:" + properties.Port + properties.Address)
 	err := http.ListenAndServe(":"+properties.Port, nil)
 	if err != nil {
@@ -183,6 +204,7 @@ func mapEndpoints(m pat.PatternServeMux, properties ServerProperties) {
 	m.Del(properties.Address+"/:id", http.HandlerFunc(DeleteRoom))
 	m.Get(properties.Address, http.HandlerFunc(FindAllRooms))
 	m.Get(properties.Address+"/:id", http.HandlerFunc(FindById))
+	m.Get(properties.Address+"/user/:id", http.HandlerFunc(FindByUserId))
 }
 
 func startDb() {
