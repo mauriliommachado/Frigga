@@ -128,6 +128,36 @@ func UpdateRoom(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+
+func addUser(w http.ResponseWriter, req *http.Request) {
+	validou,user := validAuthHeader(req)
+	if !validou{
+		unauthorized(w)
+		return
+	}
+	var room models.Room
+	tag := req.URL.Query().Get(":tag")
+	room.FindByTag(db.GetCollection(), tag)
+	if len(room.Id.Hex()) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	room.Users = append(room.Users, user.Id)
+	err := room.Merge(db.GetCollection())
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	err = rc.AddRoomToUser(user, room)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+	resp, _ := json.Marshal(room)
+	ResponseWithJSON(w, resp, http.StatusOK)
+}
+
 func FindAllRooms(w http.ResponseWriter, req *http.Request) {
 	validou,_ := validAuthHeader(req)
 	if !validou{
@@ -205,6 +235,7 @@ func mapEndpoints(m pat.PatternServeMux, properties ServerProperties) {
 	m.Get(properties.Address, http.HandlerFunc(FindAllRooms))
 	m.Get(properties.Address+"/:id", http.HandlerFunc(FindById))
 	m.Get(properties.Address+"/user/:id", http.HandlerFunc(FindByUserId))
+	m.Post(properties.Address+"/:tag/users", http.HandlerFunc(addUser))
 }
 
 func startDb() {
